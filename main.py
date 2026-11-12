@@ -176,3 +176,353 @@ class Brick(GameObject):
 
         return True
 
+
+class Game(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.lives = 3
+        self.score = 0
+        self.width = 610
+        self.height = 400
+        self.running = False
+
+        self.folder = os.path.dirname(os.path.abspath(__file__))
+
+        self.music_file = os.path.join(
+            self.folder,
+            "Backsound_compatible.wav"
+        )
+
+        self.brick_sound_file = os.path.join(
+            self.folder,
+            "brickhancur.wav"
+        )
+
+        self.life_lost_sound_file = os.path.join(
+            self.folder,
+            "nyawa_berkurang.wav"
+        )
+
+        self.lose_sound_file = os.path.join(
+            self.folder,
+            "kalah.wav"
+        )
+
+        self.brick_sound = self.load_sound(
+            self.brick_sound_file,
+            "brick_hancur.wav"
+        )
+
+        self.life_lost_sound = self.load_sound(
+            self.life_lost_sound_file,
+            "nyawa_berkurang.wav"
+        )
+
+        self.lose_sound = self.load_sound(
+            self.lose_sound_file,
+            "kalah.wav"
+        )
+
+        if self.brick_sound is not None:
+            self.brick_sound.set_volume(1.0)
+
+        if self.life_lost_sound is not None:
+            self.life_lost_sound.set_volume(1.0)
+
+        if self.lose_sound is not None:
+            self.lose_sound.set_volume(1.0)
+
+        self.canvas = tk.Canvas(
+            self,
+            bg= "#739bd0",
+            width=self.width,
+            height=self.height,
+            highlightthickness=0
+        )
+
+        self.canvas.pack()
+        self.pack()
+
+        self.items = {}
+        self.ball = None
+        self.hud = None
+        self.score_hud = None
+        self.text = None
+        self.keys = set()
+
+        self.paddle = Paddle(
+            self.canvas,
+            self.width / 2,
+            326
+        )
+
+        self.items[self.paddle.item] = self.paddle
+
+        for x in range(45, self.width - 20, 75):
+            self.add_brick(x, 55, 2)
+            self.add_brick(x, 80, 1)
+            self.add_brick(x, 105, 1)
+
+        self.update_score_text()
+        self.setup_game()
+
+        self.canvas.bind(
+            "<KeyPress-Left>",
+            lambda event: self.keys.add("Left")
+        )
+
+        self.canvas.bind(
+            "<KeyRelease-Left>",
+            lambda event: self.keys.discard("Left")
+        )
+
+        self.canvas.bind(
+            "<KeyPress-Right>",
+            lambda event: self.keys.add("Right")
+        )
+
+        self.canvas.bind(
+            "<KeyRelease-Right>",
+            lambda event: self.keys.discard("Right")
+        )
+
+        self.canvas.focus_set()
+        self.paddle_loop()
+        self.play_music()
+
+        self.master.protocol(
+            "WM_DELETE_WINDOW",
+            self.close_game
+        )
+
+    def load_sound(self, sound_file, sound_name):
+        if not os.path.exists(sound_file):
+            print("File %s tidak ditemukan." % sound_name)
+            return None
+
+        try:
+            return pygame.mixer.Sound(sound_file)
+        except pygame.error as error:
+            print(
+                "Gagal membuka %s: %s"
+                % (sound_name, error)
+            )
+            return None
+
+    def play_music(self):
+        if not os.path.exists(self.music_file):
+            print("File musik.wav tidak ditemukan.")
+            return
+
+        try:
+            pygame.mixer.music.load(self.music_file)
+            pygame.mixer.music.set_volume(0.5)
+            pygame.mixer.music.play(-1)
+        except pygame.error as error:
+            print("Gagal membuka musik.wav:", error)
+
+    def play_life_lost_sound(self):
+        if self.life_lost_sound is not None:
+            self.life_lost_sound.play()
+
+    def play_lose_sound(self):
+        if self.lose_sound is not None:
+            self.lose_sound.play()
+
+    def stop_music(self):
+        pygame.mixer.music.stop()
+
+    def close_game(self):
+        self.running = False
+        pygame.mixer.music.stop()
+        pygame.mixer.stop()
+        pygame.mixer.quit()
+        self.master.destroy()
+
+    def paddle_loop(self):
+        if not self.master.winfo_exists():
+            return
+
+        if "Left" in self.keys:
+            self.paddle.move(-4)
+
+        if "Right" in self.keys:
+            self.paddle.move(4)
+
+        self.after(16, self.paddle_loop)
+
+    def setup_game(self):
+        self.running = False
+        self.add_ball()
+        self.update_lives_text()
+
+        if self.text is not None:
+            self.canvas.delete(self.text)
+
+        self.text = self.draw_text(
+            300,
+            200,
+            "Tekan SPACE untuk memulai"
+        )
+
+        self.canvas.bind(
+            "<space>",
+            lambda event: self.start_game()
+        )
+
+        self.canvas.focus_set()
+
+    def add_ball(self):
+        if self.ball is not None:
+            self.ball.delete()
+
+        paddle_coords = self.paddle.get_position()
+        x = (paddle_coords[0] + paddle_coords[2]) / 2
+
+        self.ball = Ball(
+            self.canvas,
+            x,
+            310
+        )
+
+        self.paddle.set_ball(self.ball)
+
+    def add_brick(self, x, y, hits):
+        brick = Brick(
+            self.canvas,
+            x,
+            y,
+            hits,
+            self.brick_sound
+        )
+
+        self.items[brick.item] = brick
+
+    def draw_text(self, x, y, text, size=25):
+        font = ("Montserrat Bold", size)
+
+        return self.canvas.create_text(
+            x,
+            y,
+            text=text,
+            font=font,
+            fill="white"
+        )
+
+    def update_lives_text(self):
+        text = "Nyawa: %s" % self.lives
+
+        if self.hud is None:
+            self.hud = self.draw_text(
+                50,
+                20,
+                text,
+                15
+            )
+        else:
+            self.canvas.itemconfig(
+                self.hud,
+                text=text
+            )
+
+    def update_score_text(self):
+        text = "Total Score: %s" % self.score
+
+        if self.score_hud is None:
+            self.score_hud = self.draw_text(
+                540,
+                20,
+                text,
+                12
+            )
+        else:
+            self.canvas.itemconfig(
+                self.score_hud,
+                text=text
+            )
+
+    def start_game(self):
+        if self.running:
+            return
+
+        self.running = True
+        self.canvas.unbind("<space>")
+
+        if self.text is not None:
+            self.canvas.delete(self.text)
+            self.text = None
+
+        self.paddle.ball = None
+        self.game_loop()
+
+    def game_loop(self):
+        if not self.running:
+            return
+
+        self.check_collisions()
+
+        num_bricks = len(
+            self.canvas.find_withtag("brick")
+        )
+
+        if num_bricks == 0:
+            self.running = False
+            self.stop_music()
+
+            self.draw_text(
+                300,
+                200,
+                "Kamu Menang!"
+            )
+
+        elif self.ball.get_position()[3] >= self.height:
+            self.running = False
+            self.lives -= 1
+            self.update_lives_text()
+
+            if self.lives <= 0:
+                self.stop_music()
+                self.play_lose_sound()
+
+                self.draw_text(
+                    300,
+                    200,
+                    "Nice Try bang!"
+                )
+            else:
+                self.play_life_lost_sound()
+                self.after(1000, self.setup_game)
+
+        else:
+            self.ball.update()
+            self.after(16, self.game_loop)
+
+    def check_collisions(self):
+        ball_coords = self.ball.get_position()
+
+        overlapping_items = self.canvas.find_overlapping(
+            *ball_coords
+        )
+
+        objects = [
+            self.items[item]
+            for item in overlapping_items
+            if item in self.items
+        ]
+
+        points = self.ball.collide(objects)
+
+        if points > 0:
+            self.score += points
+            self.update_score_text()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Brick Breaker")
+    root.resizable(False, False)
+
+    game = Game(root)
+    root.mainloop()
+    
