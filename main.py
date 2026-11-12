@@ -127,3 +127,52 @@ class Paddle(GameObject):
             if self.ball is not None:
                 self.ball.move(offset, 0)
 
+
+class Brick(GameObject):
+    COLORS = {
+        1: "white",
+        2: "#3498db",
+        3: "#222222"
+    }
+
+    def __init__(self, canvas, x, y, hits, destroy_sound=None):
+        self.width = 70
+        self.height = 20
+        self.hits = hits
+        self.destroy_sound = destroy_sound
+        self.destroyed = False
+
+        item = canvas.create_rectangle(
+            x - self.width / 2,
+            y - self.height / 2,
+            x + self.width / 2,
+            y + self.height / 2,
+            fill=Brick.COLORS[hits],
+            outline="#111111",
+            width=2,
+            tags="brick"
+        )
+
+        super().__init__(canvas, item)
+
+    def hit(self):
+        if self.destroyed:
+            return False
+
+        self.hits -= 1
+
+        if self.hits <= 0:
+            self.destroyed = True
+
+            if self.destroy_sound is not None:
+                self.destroy_sound.play()
+
+            self.delete()
+        else:
+            self.canvas.itemconfig(
+                self.item,
+                fill=Brick.COLORS[self.hits]
+            )
+
+        return True
+
